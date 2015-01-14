@@ -1,8 +1,8 @@
 #ifndef __NRF24L01_H
 #define __NRF24L01_H
 
-#include "stm8l15x.h"
-#include "nrf24l01_config.h"
+//#include "stm8l15x.h"
+//#include "nrf24l01_config.h"
 
 
 
@@ -68,8 +68,10 @@
 #define ARD         4
 #define ARC         0
 
+#define CONT_WAVE   7
+#define RF_DR_LOW   5
 #define PLL_LOCK    4
-#define RF_DR       3
+#define RF_DR_HIGH  3
 #define RF_PWR      1
 #define LNA_HCURR   0
 
@@ -88,15 +90,23 @@
 #define RX_FIFO_FULL     1
 #define RX_FIFO_EMPTY    0
 
+#define EN_DPL 2
+#define EN_ACK_PAY 1
+#define EN_DYN_ACK 0
+
 /*****   Instructions    *****/
-#define R_REGISTER    0x00
-#define W_REGISTER    0x20
-#define R_RX_PAYLOAD  0x61
-#define W_TX_PAYLOAD  0xA0
-#define FLUSH_TX      0xE1
-#define FLUSH_RX      0xE2
-#define REUSE_TX_PL   0xE3
-#define NOP           0xFF
+#define R_REGISTER          0x00
+#define W_REGISTER          0x20
+#define R_RX_PAYLOAD        0x61
+#define W_TX_PAYLOAD        0xA0
+#define FLUSH_TX            0xE1
+#define FLUSH_RX            0xE2
+#define REUSE_TX_PL         0xE3
+#define ACTIVATE            0x50
+#define R_RX_PL_WID         0x60
+#define W_ACK_PAYLOAD       0xA8
+#define W_TX_PAYLOAD_NOACK  0xB0
+#define NOP                 0xFF
 
 /****************************/
 
@@ -166,15 +176,14 @@ AW_5_BYTES
 #define ARC_CNT_MASK 0xF
 #define PLOS_CNT_MASK 0xF
 
+#define uint8_t unsigned char
+
 void nrf24l01p_init();
 uint8_t nrf24l01p_spi_rw(uint8_t value);
 uint8_t nrf24l01p_read(uint8_t reg, uint8_t * mem, int size);
 uint8_t nrf24l01p_write(uint8_t reg, uint8_t * mem, int size);
 uint8_t nrf24l01p_read_byte(uint8_t reg);
 void nrf24l01p_write_byte(uint8_t reg, uint8_t value);
-
-#define nrf24l01p_read_reg(reg,mem,size) nrf24l01p_read(R_REGISTER | (REGISTER_MASK & reg), mem, size)
-#define nrf24l01p_write_reg(reg,mem,size) nrf24l01p_write(W_REGISTER | (REGISTER_MASK & reg), mem, size)
 
 #define nrf24l01p_ce_high() GPIO_WriteBit(GPIOA, CE, SET)
 #define nrf24l01p_ce_low() GPIO_WriteBit(GPIOA, CE, RESET)
@@ -187,36 +196,87 @@ void nrf24l01p_write_byte(uint8_t reg, uint8_t value);
 #define nrf24l01p_irq_disable() {}
 //disableInterrupts()
 
+#define nrf24l01p_read_reg(reg,mem,size) nrf24l01p_read(R_REGISTER | (REGISTER_MASK & reg), mem, size)
+#define nrf24l01p_write_reg(reg,mem,size) nrf24l01p_write(W_REGISTER | (REGISTER_MASK & reg), mem, size)
+
 #define power_up() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) | (1 << PWR_UP))
 #define power_down() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) & ~(1 << PWR_UP))
 
 #define set_rx_mode() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) | (1 << PRIM_RX))
 #define set_tx_mode() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) & ~(1 << PRIM_RX))
 
+
+#define enable_irqs() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) & ~((1 << MASK_MAX_RT) | (1<<MASK_RX_DR) | (1 << MASK_TX_DS)))
+#define disable_irqs() nrf24l01p_write_byte(W_REGISTER | CONFIG, nrf24l01p_read_byte(R_REGISTER | CONFIG) |  ((1 << MASK_MAX_RT) | (1<<MASK_RX_DR) | (1 << MASK_TX_DS)) )
+
+#define crc_enable() nrf24l01p_write_byte(W_REGISTER | CONFIG, (nrf24l01p_read_byte(R_REGISTER | CONFIG) | (1 << EN_CRC)))
+#define crc_disable() nrf24l01p_write_byte(W_REGISTER | CONFIG, (nrf24l01p_read_byte(R_REGISTER | CONFIG) & ~(1 << EN_CRC)))
+#define is_crc_enabled() ((nrf24l01p_read_byte(R_REGISTER | CONFIG) & (1 << EN_CRC)) != 0)
+
+#define set_1byte_crc() nrf24l01p_write_byte(W_REGISTER | CONFIG, (nrf24l01p_read_byte(R_REGISTER | CONFIG) & ~(1 << CRCO)))
+#define set_2byte_crc() nrf24l01p_write_byte(W_REGISTER | CONFIG, (nrf24l01p_read_byte(R_REGISTER | CONFIG) | (1 << CRCO)))
+#define get_crc_size() ((nrf24l01p_read_byte(R_REGISTER | CONFIG) >> CRCO) & 1)
+
+
 #define set_channel(ch) nrf24l01p_write_byte(W_REGISTER | RF_CH, ch & CHANNEL_MASK)
-#define get_channel() (nrf24l01p_read_byte(W_REGISTER | RF_CH) & CHANNEL_MASK)
+#define get_channel() (nrf24l01p_read_byte(R_REGISTER | RF_CH) & CHANNEL_MASK)
 
-#define set_rf_power(rf_power) nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(RF_PWR_MASK << RF_PWR)) | (rf_power & RF_PWR_MASK))
+#define set_rf_power(rf_power) nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(RF_PWR_MASK << RF_PWR)) | ((rf_power & RF_PWR_MASK) << RF_PWR) )
 #define get_rf_power() ( (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) >> RF_PWR) & RF_PWR_MASK)
-#define set_1mbps_speed() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~RF_DR)
-#define set_2mbps_speed() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) | RF_DR)
 
-#define lna_gain_enable() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) | (1 << LNA_HCURR))
-#define lna_gain_disable() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(1 << LNA_HCURR))
+#define set_250kbps_speed() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, ((nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(1 << RF_DR_HIGH)) | (1 << RF_DR_LOW)) )
+#define set_1mbps_speed() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(1 << RF_DR_HIGH | 1 << RF_DR_LOW)))
+#define set_2mbps_speed() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, ((nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(1 << RF_DR_LOW)) | (1 << RF_DR_HIGH)))
+#define get_speed() ((nrf24l01p_read_byte(R_REGISTER | RF_SETUP) >> RF_DR_HIGH) & 5)
+
+#define lna_gain_enable() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) | (1 << LNA_HCURR)))
+#define lna_gain_disable() nrf24l01p_write_byte(W_REGISTER | RF_SETUP, (nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & ~(1 << LNA_HCURR)))
+#define is_lna_gain_enabled() ((nrf24l01p_read_byte(R_REGISTER | RF_SETUP) & (1 << LNA_HCURR)) != 0)
 
 #define set_retry_delay(delay) nrf24l01p_write_byte(W_REGISTER | SETUP_RETR, (nrf24l01p_read_byte(R_REGISTER | SETUP_RETR) & (ARC_MASK << ARC)) | ((delay & ARD_MASK) << ARD))
 #define set_retry_count(count) nrf24l01p_write_byte(W_REGISTER | SETUP_RETR, (nrf24l01p_read_byte(R_REGISTER | SETUP_RETR) & (ARD_MASK << ARD)) | ((count & ARC_MASK) << ARC))
 
+#define get_retry_delay() ((nrf24l01p_read_byte(R_REGISTER | SETUP_RETR) >> ARD) & ARD_MASK)
+#define get_retry_count() (nrf24l01p_read_byte(R_REGISTER | SETUP_RETR) & ARC_MASK)
+#define is_retry_enabled() (get_retry_count() != 0)
+
 #define set_address_width(aw) nrf24l01p_write_byte(W_REGISTER | SETUP_AW, aw & AW_MASK)
+#define get_address_width() (nrf24l01p_read_byte(R_REGISTER | SETUP_AW) & AW_MASK)
 
 #define reset_lost_count() set_channel(get_channel())
-#define get_retry_count() (nrf24l01p_read_byte(R_REGISTER | OBSERVE_TX) & ARC_CNT_MASK)
-#define get_lost_count() ((nrf24l01p_read_byte(R_REGISTER | OBSERVE_TX) >> PLOS_CNT) & PLOS_CNT_MASK)
+#define get_curr_retry_count() (nrf24l01p_read_byte(R_REGISTER | OBSERVE_TX) & ARC_CNT_MASK)
+#define get_curr_lost_count() ((nrf24l01p_read_byte(R_REGISTER | OBSERVE_TX) >> PLOS_CNT) & PLOS_CNT_MASK)
 
 #define is_carrier_detected() nrf24l01p_read_byte(R_REGISTER | CD)
 
 #define is_data_sent() (nrf24l01p_read_byte(R_REGISTER | STATUS) & (1<<TX_DS))
 #define is_max_tx() (nrf24l01p_read_byte(R_REGISTER | STATUS) & (1<<MAX_TX))
 
+#define auto_ack_enable(pipeId)  nrf24l01p_write_byte(W_REGISTER | EN_AA, (nrf24l01p_read_byte(R_REGISTER | EN_AA) | (1 << pipeId)))
+#define auto_ack_disable(pipeId)  nrf24l01p_write_byte(W_REGISTER | EN_AA, (nrf24l01p_read_byte(R_REGISTER | EN_AA) & ~(1 << pipeId)))
+#define is_auto_ack_enabled(pipeId)  ((nrf24l01p_read_byte(R_REGISTER | EN_AA) & (1 << pipeId)) != 0)
+
+#define pipe_enable(pipeId) nrf24l01p_write_byte(W_REGISTER | EN_RXADDR, (nrf24l01p_read_byte(R_REGISTER | EN_RXADDR) | (1 << pipeId)))
+#define pipe_disable(pipeId)  nrf24l01p_write_byte(W_REGISTER | EN_RXADDR, (nrf24l01p_read_byte(R_REGISTER | EN_RXADDR) & ~(1 << pipeId)))
+#define is_pipe_enabled(pipeId)  ((nrf24l01p_read_byte(R_REGISTER | EN_RXADDR) & (1 << pipeId)) != 0)
+
+#define set_pipe_size(pipeId, size) nrf24l01p_write_byte(W_REGISTER | (RX_PW_P0+pipeId), size)
+#define get_pipe_size(pipeId) nrf24l01p_read_byte(R_REGISTER | (RX_PW_P0+pipeId))
+
+#define dyn_size_enable() nrf24l01p_write_byte(W_REGISTER | FEATURE, (nrf24l01p_read_byte(R_REGISTER | FEATURE) | (1 << EN_DPL)))
+#define dyn_size_disable() nrf24l01p_write_byte(W_REGISTER | FEATURE, (nrf24l01p_read_byte(R_REGISTER | FEATURE) & ~(1 << EN_DPL)))
+#define is_dyn_size_enabled() ((nrf24l01p_read_byte(R_REGISTER | FEATURE) & (1 << EN_DPL)) != 0)
+
+#define pipe_dyn_size_enable(pipeId) nrf24l01p_write_byte(W_REGISTER | DYNPD, (nrf24l01p_read_byte(R_REGISTER | DYNPD) | (1 << pipeId)))
+#define pipe_dyn_size_disable(pipeId) nrf24l01p_write_byte(W_REGISTER | DYNPD, (nrf24l01p_read_byte(R_REGISTER | DYNPD) & ~(1 << pipeId)))
+#define is_pipe_dyn_size_enabled(pipeId)  ((nrf24l01p_read_byte(R_REGISTER | DYNPD) & (1 << pipeId)) != 0)
+
+#define get_dyn_packet_size() nrf24l01p_read_byte(R_RX_PL_WID)
+
+#define is_tx_fifo_empty(fifo_status) ( (fifo_status & (1 << TX_FIFO_EMPTY)) != 0 )
+#define is_rx_fifo_empty(fifo_status) ( (fifo_status & (1 << RX_FIFO_EMPTY)) != 0 )
+
+
+#define is_max_retrys(status) ( (status & (1 << MAX_RT)) != 0 )
 
 #endif //__NRF24L01_H
