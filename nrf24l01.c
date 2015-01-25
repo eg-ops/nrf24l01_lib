@@ -2,15 +2,6 @@
 
 
 
-uint8_t nrf24l01p_spi_rw(uint8_t value) {
-	while (SPI_GetFlagStatus(SPI1, SPI_FLAG_TXE) == RESET) {
-	}
-	SPI_SendData(SPI1, value);
-	while (SPI_GetFlagStatus(SPI1, SPI_FLAG_RXNE) == RESET) {
-	}
-	return SPI_ReceiveData(SPI1);
-}
-
 uint8_t nrf24l01p_read(uint8_t reg, uint8_t * mem, int size) {
         nrf24l01p_irq_disable();
         nrf24l01p_csn_low();

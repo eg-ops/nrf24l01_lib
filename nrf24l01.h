@@ -176,7 +176,17 @@ AW_5_BYTES
 #define ARC_CNT_MASK 0xF
 #define PLOS_CNT_MASK 0xF
 
+#ifndef uint8_t 
 #define uint8_t unsigned char
+#endif
+
+extern uint8_t nrf24l01p_spi_rw(uint8_t value);
+extern void nrf24l01p_ce_high();
+extern void nrf24l01p_ce_low();
+extern void nrf24l01p_csn_high();
+extern void nrf24l01p_csn_low();
+extern void nrf24l01p_irq_enable();
+extern void nrf24l01p_irq_disable();
 
 void nrf24l01p_init();
 uint8_t nrf24l01p_spi_rw(uint8_t value);
@@ -185,6 +195,7 @@ uint8_t nrf24l01p_write(uint8_t reg, uint8_t * mem, int size);
 uint8_t nrf24l01p_read_byte(uint8_t reg);
 void nrf24l01p_write_byte(uint8_t reg, uint8_t value);
 
+/*
 #define nrf24l01p_ce_high() GPIO_WriteBit(GPIOA, CE, SET)
 #define nrf24l01p_ce_low() GPIO_WriteBit(GPIOA, CE, RESET)
 
@@ -195,6 +206,7 @@ void nrf24l01p_write_byte(uint8_t reg, uint8_t value);
 //enableInterrupts()
 #define nrf24l01p_irq_disable() {}
 //disableInterrupts()
+*/
 
 #define nrf24l01p_read_reg(reg,mem,size) nrf24l01p_read(R_REGISTER | (REGISTER_MASK & reg), mem, size)
 #define nrf24l01p_write_reg(reg,mem,size) nrf24l01p_write(W_REGISTER | (REGISTER_MASK & reg), mem, size)
